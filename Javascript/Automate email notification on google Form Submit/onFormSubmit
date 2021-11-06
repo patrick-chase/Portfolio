@@ -1,0 +1,97 @@
+/** 
+ * 
+ * NOTE. 
+ *     - This was built out with help from the following workflows: 
+ *         - https://yagisanatode.com/category/code/google-apps-script/formapp/ 
+ *         - https://stackoverflow.com/questions/26253706/how-to-extract-response-items-from-a-google-form 
+ *     - Gmail API service needs to be activated. 
+ *     - Use the Test.gs file to activate the authentication of the scopes you need to run this script.
+ *     - Item ids.gs is included to pull item ids and titles. Run it, copy the execution log, and paste it below so you can reference. 
+ * 
+ * Item titles and ids 
+    1 Question 1: 123
+    2 Question 2: 456
+    3 Question 3: 789
+ * 
+ * 
+ */
+
+    function onFormSubmit(e) {
+        var formResponse = e.response;
+        var itemResponses = formResponse.getItemResponses();
+        var submitterEmail = formResponse.getRespondentEmail().trim(); // this requires you  to force the form to collect gmail account information for those responding to your form. 
+        var email1 = "example@example.com" + "," + "example2@example.com" // update emails here, can send notifications to multiple email addresses. 
+        var email2 = "example3@example.com" + "," + "example4@example.com" // you can define different groups to send notifications to based on different responses. 
+
+      // this for loop allows us to account for dynamic responses, i.e. not all questions require an answer. You can avoid this by requiring a response to all questions before form submission
+      // then you can reference each item by it's item id.  
+        for (var i=0; i<itemResponses.length; i++) {
+          switch (itemResponses[i].getItem().getTitle()) {
+            case "Question 1":
+              var q1Responses = itemResponses[i].getResponse();
+              break;
+            case "Question 2":
+              var q2Responses = itemResponses[i].getResponse();
+              break;
+            case "Question 3":
+              var q3Responses = itemResponses[i].getResponse();
+              break;               
+          }
+        }
+
+      // this if else introduces logic for conditionally sending out email notifications. In this example Question 2 was a series of check boxes. 
+      // If no q2 boxes are checked in a respondents submission than it sends the email with the subject line "else email" below. 
+      if(q2Responses != null) {
+          //Grab the signature block of the sender's account. NOTE! Requires Gmail API Service to be activated.
+          var signature = Gmail.Users.Settings.SendAs.list("me").sendAs.filter((account) => {
+          if(account.isDefault){
+            return true}
+            })[0].signature;
+      
+          MailApp.sendEmail({
+          to: email1,
+          subject: "Your subject line",
+          htmlBody: `<p>Hello,
+          <p>${submitterEmail} has responded to your form. you can reference fields you've collected in the following format ${q2Responses}. </p>
+          </br>
+          <p><em>This email was automatically generated. Please do not reply. If you believe you should not have recieved this email, contact youremail@example.com. </em>
+          </br>
+          <p>Thanks,</p>
+          </br>
+          <p>${signature}</p>`,
+        });
+      } else {
+          var signature = Gmail.Users.Settings.SendAs.list("me").sendAs.filter((account) => {
+          if(account.isDefault){
+            return true}
+            })[0].signature;
+      
+          MailApp.sendEmail({
+          to: email2,
+          subject: "else email",
+          htmlBody: `<p>Hello,
+          <p>${submitterEmail} responded to your form. They did not provide any responses for question 2. </p>
+          </br>
+          <p><em>This email was automatically generated. Please do not reply. If you believe you should not have recieved this email, contact youremail@example.com. </em>
+          </br>
+          <p>Thanks,</p>
+          </br>
+          <p>${signature}</p>`,
+        });
+      }
+      }
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      

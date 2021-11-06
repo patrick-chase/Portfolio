@@ -1,0 +1,11 @@
+// itemId can only be run after you've created a google form and attached this script to it. 
+// 
+
+function itemId() {
+    var form = FormApp.getActiveForm();
+    var items = form.getItems();
+    for (var i in items) { 
+      Logger.log(items[i].getTitle() + ': ' + items[i].getId());
+    }
+    }
+    

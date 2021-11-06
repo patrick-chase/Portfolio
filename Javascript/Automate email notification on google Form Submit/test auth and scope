@@ -1,0 +1,35 @@
+/**
+ * Tests the form script without a user entering in a new form. 
+ * 
+ * NOTE: You must have at least one response in your form to test it. it is also going to send the verification email to whoever submitted the response.  
+ */
+ function testAndAuthScope(){
+    const form = FormApp.getActiveForm();
+    const formResponses = form.getResponses();
+    
+    // const responses = e.response;
+    const responses = formResponses[0];//This changes from the event (e) response to the first one called in the form.
+    const email = ["youremail@example.com"];
+    const name = responses.getItemResponses()[0].getResponse().trim();
+  
+    //Check if the users just added their first name or full name. 
+    const firstName = (name.indexOf(" ") == -1)? name : name.substring(0,name.indexOf(" "));
+  
+    //Grab the signature block of the sender's account. NOTE! Requires Gmail API Service to be activated.
+    var signature = Gmail.Users.Settings.SendAs.list("me").sendAs.filter((account) => {
+    if(account.isDefault){
+      return true}
+      })[0].signature;
+  
+    MailApp.sendEmail({
+      to: email[0],
+      subject: "Test",
+      htmlBody: `<p>Hi, ${firstName},
+      <p>Testing the code and getting the scope authenication</p>
+  
+      </br>
+      <p>Thanks,</p>
+      </br>
+      <p>${signature}</p>`,
+    });
+  };

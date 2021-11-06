@@ -1,0 +1,24 @@
+// MoveFiles searches a google folder for files in fileNames and moves them to a different google folder
+function MoveFiles(){
+    // fileNames are the names of the files you want to search for and move
+    var fileNames =  ['File name 1', 
+                      'File name 2', 
+                      'File name 3'];
+    //for loop iterates through each file name
+      for(z = 0; z< fileNames.length; z++)
+      {
+    // files goes to the current folder by it's ID and selects each file by name 
+        var files = DriveApp.getFolderById("FOLDER ID").getFilesByName(fileNames[z]) 
+        while (files.hasNext()) 
+        {
+          var file = files.next();
+    //      destination is the google folder you want to move files to 
+          var destination = DriveApp.getFolderById("FOLDER ID-");
+          destination.addFile(file);
+          var pull = DriveApp.getRootFolder();
+          pull.removeFile(file);
+      
+      }
+    }
+    }
+    

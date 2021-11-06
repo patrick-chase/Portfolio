@@ -1,0 +1,241 @@
+---
+title: 'ECO 395 Project: Transaction Fraud Detection'
+author: "Patrick Chase"
+date: "5/8/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, 
+                      include = FALSE,
+                      message = FALSE, 
+                      warning = FALSE)
+
+library(data.table)
+library(dplyr)     
+library(ggplot2)   
+library(caret)     
+library(corrplot)   
+library(xgboost)    
+library(rsample)
+library(Matrix)
+library(tidyverse)
+library(janitor)
+library(recipes)
+library(xgboost)
+library(magrittr)
+library(dplyr)
+library(Matrix)
+library(knitr)
+set.seed(1234)
+
+
+```
+# Abstract
+The problem I'd like to solve is the identification of credit card fraud for a leading payment service company, Vesta Corporation, who specializes in guaranteeing card-not-present (CNP) transactions. Specifically, I set out to create the most effective classification model to identify whether or not a given transaction is fraudulent. Additionally, I'd like to answer the question of which variables appear to be most connected to the incident of fraud. I choose to do so through a gradient boosted tree algorithm implemented through the use of xgboost R package. I chose this method of over gbm because of xgboost's ability to cope with over-fitting. In addition to that, it is also offers significantly more efficient processing and memory utilization through it's use of sparse matrices. While that presented its own challenges, the trade-off was still worth the investment given the size of this data set. I was able to achieve a classification accuracy of approximately 96% with relatively quick processing times. 
+
+
+# Introduction
+Fraud detection and prevention has been a persistent problem since the widespread use of non-cash payment systems became popular in the mid 1990s. Given the regulatory environment of the United States and the massive increase in the amount of transactions, corporations have a large incentive to prevent fraud in real time. These circumstances present a ripe environment for automation through the use of machine learning, which has been relatively common. Banks, payment processors, and tech companies such as Apple, Amazon, and Microsoft devote copious resources to the development of automated fraud detection systems. 
+
+Despite those efforts, billions of dollars are lost each year due to fraud in a diverse range of fields. Bad actors and corporations are in a constant arms race when it comes to fraudulent activity. Whether it's Facebook attempting to detect fraudulent ad buys on their site or a payment processor such as Vesta preventing fraud from occurring at the transaction level, being able to effectively detect and prevent fraud is in the interest of businesses and consumers. While potentially relatively simple, automated fraud detection through machine learning present an easy avenue into the use of algorithms for a typical business to solve everyday problems. 
+
+In the spirit of the problem, Vesta partnered with IEEE Computation Intelligence Society to host a competition on Kaggle with a real world data set. The goal was simple. Create the most accurate classification model. While the competition is closed, I think this particular problem and rich data set provide a real world opportunity to demonstrate the skills I've attained in this class. 
+
+\newpage
+# Methods
+## Data
+The [*data set*](https://www.kaggle.com/c/ieee-fraud-detection/data) used in this analysis was found through a Google search of "fraud detection data sets". It consisted pre-split files separated into four different comma-separated values (CSV) files, two CSV files for a training set and two for a test set. For each set, the transaction data is stored in one file and anonymized identity data is stored in the other. As this was posted as part of a competition, the posted test set does not include the outcome variable of interest, isFraud. Its purpose was to be used by participants submit their work to the competition. Because of that it was not suitable for testing the effectiveness of my work. As a result, I generated my own training and test sets from the training data provided by Vesta. 
+
+The data itself is a large collection of information for each transaction in a limited time period. As this is real world data, the time period is not specific when it was collected but instead is a delta in relation to the first transaction. There are also variables that are explicitly related to products purchased, addresses, and email domains. The rest of the data are features that have been engineered by Vesta. The actual meanings of those variables have been masked, however, for the purposes classification they were satisfactory.
+
+Additionally, the technical constraints of my laptop prevented me from working with the full data in a timely manner. In short, my computer doesn't have enough memory to hold the full data set and the necessary objects to run a xgboost model. As a work around, I chose to import the data from the Kaggle, merge the relevant CSV files, and select a random sample that was the equivalent of 20% of the original data. This resulted in a data set that is 28,847 observations of 435 variables. The code for that work flow can be found in the Appendix of the RMarkdown file. 
+
+### Data Cleaning and Preperation
+My strategy of choice is to rely on gradient boosted trees through the use of the xgboost R package. Xgboost requires all variables be either numeric or factor before being fed into sparse matrices. As this is real world data, multiple variables had large majorities of their observations as NA. I one-hot-encoded my categorical variables and was able to output sparse matrices for my training and test data. 
+
+My first attempt at estimating my model ran without any issue. However, when I went to diagnose its effectiveness, my training data had one more column then the testing data. This was due to the high level of NAs in the data and the random sampling of the data when conducting my train/test split. The split was not capturing enough observations in the testing set in order to fully capture all the variables in the sparse matrix. This presented an interesting problem that took a nonnegligible amount of time to diagnose.^[Interested parties can find more details of that work flow in the Appendix]
+
+
+For my purposes, I found it to be more expedient to drop those variables all together rather than attempting to account for all the potential omitted observations due the way sparse model matrix operates. If the isFraud variable hadn't been omitted from the posted test set, this wouldn't have been an issue. 
+
+## Gradient Boosted Trees
+My chosen method is gradient boosting through the use of xgboost. Boosting in a general sense, relies on decision trees and in each iteration sets a weight to those observations it mis-classified in earlier trees in order to get it right. Xgboost does applies this algorithm in a a highly efficient way due to its use of sparse matrices. This saves memory and simplifies computations. 
+
+```{r data cleaning and prep}
+
+fraud <- read.csv("https://raw.githubusercontent.com/patrick-chase/Hello-World/main/Data%20Mining%20work/Project%20work%20/Fraud%20Data%20Samples%20/fraud_train_sample.csv")
+
+factorNames <- c('P_emaildomain', 'R_emaildomain', 'ProductCD', 'card4', 'card6')
+
+
+drop_vars <- c('TransactionID', 'X', 'dist1', 'D11', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8', 'V9', 'V10', 'V11', "DeviceType", 'DeviceInfo', 'id_12', 'id_13', 'id_14', 'id_15', 'id_16', 'id_17', 'id_18', 'id_19', 'id_20', 'id_21', 'id_22', 'id_23', 'id_24', 'id_25', 'id_26', 'id_27', 'id_28', 'id_29', 'id_30', 'id_31', 'id_32', 'id_33', 'id_34', 'id_35', 'id_36', 'id_37', 'id_38')
+
+
+# dropping variables with more than 50% NA and id variables, factoring categorical variables
+fraud_clean <- select(fraud, -drop_vars) %>%
+ mutate_each_(funs(factor(.)), factorNames)
+
+
+# train/test split
+fraud_split = initial_split(fraud_clean, prop = .7)
+fraud_train = training(fraud_split)
+fraud_test = testing(fraud_split)
+
+
+# the following code prevents R from dropping rows with NA when creating my sparse model matrices
+previous_na_action <- options('na.action') #store the current na.action
+options(na.action='na.pass') #change the na.action
+
+## One-hot encoding in sparse mtx 
+sparse_train <- sparse.model.matrix(isFraud ~ . -isFraud, data = fraud_train) 
+sparse_test <- sparse.model.matrix(isFraud ~ . -isFraud, data = fraud_test)
+
+
+options(na.action=previous_na_action$na.action) #reset the na.action
+
+train_label <- fraud_train$isFraud
+test_label <- fraud_test$isFraud
+train_gbmtx <-xgb.DMatrix(data = as.matrix(sparse_train), label = train_label)
+test_gbmtx <- xgb.DMatrix(data = as.matrix(sparse_test), label = test_label)
+
+## clearing memory, Rstudio crashed when trying to run model if I didn't include this
+rm(list = c('fraud', 'factorNames', 'NA_vars', 'fraud_clean', 'fraud_split', 'fraud_train', 'fraud_test'))
+```
+
+```{r xgboost parameters/model/plots}
+
+# Parameters mod 1 
+nc <- length(unique(train_label))
+xgb_params <- list("objective" = "multi:softprob",
+                  "eval_metric" = "mlogloss",
+                  "num_class" = nc)
+watchlist <- list(train = train_gbmtx, test = test_gbmtx)
+
+# Model 1
+mod.1 <- xgb.train(params = xgb_params, 
+                   data = train_gbmtx, 
+                   nrounds = 100,
+                   watchlist = watchlist)
+
+
+
+# error plot
+e1 <- data.frame(mod.1$evaluation_log)
+plot.1 <- ggplot(data = e1, aes(x=iter, y=test_mlogloss)) + 
+  geom_line(color = 'red') +
+  geom_point(mapping = aes(x = iter, y = train_mlogloss), color = 'blue') +  
+  labs(
+    title = "Figure 1 Error Plot",
+    x="Iteration",
+    y="Logloss") +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "right") 
+plot.1
+
+#variable importance plot 
+import <- xgb.importance(colnames(train_gbmtx), model = mod.1)
+imp_table <- xgb.plot.importance(import, top_n = 20)
+import_plot <- xgb.ggplot.importance(import, top_n = 20)
+imp_ggplot <- import_plot +  labs(
+  title = "Figure 2 Feature Importance",
+  x="Features",
+  y="Gain") +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "right") 
+```
+
+\newpage
+
+# Results
+Table 1 shows the confusions matrix for my model's classification. Summing the diagonals and dividing by the total number of observations shows that the model had over 96% classification accuracy. 
+```{r predicition and confusion matrix}
+p <- predict(mod.1, newdata = test_gbmtx)
+pred<- matrix(p, nrow= nc, ncol = length(p)/nc) %>%
+  t()%>%
+  data.frame() %>%
+  mutate(label = test_label, max_prob = max.col(., "last")-1)
+confusion_mtx<-table(prediction = pred$max_prob, Actual = pred$label)
+
+model_accuracy <- data.frame("Classification Accuracy" = sum(diag(confusion_mtx))/sum(confusion_mtx)*100)
+
+```
+
+```{r confusion matrix, include = TRUE}
+kable(confusion_mtx, caption = "Confusion Matrix")
+```
+
+
+
+```{r, include = TRUE}
+kable(model_accuracy)
+```
+
+
+
+```{r error plot, include = TRUE}
+plot.1
+```
+\newpage
+
+The red line in the error plot represents the log loss of the test data, while the blue dots represent the log loss of my training data. It above demonstrates that my model is unlikely to be over fitting. If over-fitting were occurring, the test log loss would initially fall but then quickly begin to climb. The fact that it follows closely is a good sign. 
+
+The table below shows the relative importance of each feature in the model, sorted by gain and focused on the top 20 variables. The variable importance plot focuses in on gain. 
+
+```{r var importance table, include = TRUE}
+kable(imp_table)
+```
+
+```{r importance table, include = TRUE}
+imp_ggplot
+```
+
+# Conclusion
+
+My model performed very well after my data had been properly cleaned and formatted. This exercise demonstrates the relative ease with which gradient boosting can produce tangible and useful insights when it comes to classification. 
+
+Interesting to note is that a large proportion of the top features are ones that Vesta engineered and thus can't really be interpreted outside of their organization. The details they do provide indicate that variables beginning with "C" are counts. It could be count's of addresses, total transactions on this card, etc. Without knowing more behind it's meaning its difficult to say. Another interesting observation is that the time variable, TransactionDT, was a relatively important feature. Without knowing where the time measure begins, it's difficult to say what to make of that, although I suspect that it may correspond to working hours in countries where many organized credit card fraudsters base their operations. Regardless, if Vesta were inclined to do so they could have their system automatically flag transaction with abnormal counts of C1, C13, and C14. They could even add additional weights to those if they occur in the time periods I've suggested above. If that were they case they could then require multi-factor authentication in order to ensure that it's a true customer engaging in a transaction and not a bad actor. 
+
+
+# Appendix
+A point of interest I discovered in my analysis is just how unlikely it was for me to run into the difficulties I had with sparse.matrix.model command. If I had picked any random number other than "1234" to set my seed, I would have had my training and test matrices off by a dozen to hundreds of variables. Instead, it was only off by 1 column leading me to believe I had simply misplaced a rogue minus sign somewhere. I eventually ended up creating a data frame that matched all the columns of the two matrices, and created a short ifelse rule to identify where they weren't matching up. 
+```{r original data and random sampling}
+# link to original data - https://www.kaggle.com/c/ieee-fraud-detection/data 
+
+#this entire chunk is included to demonstrate my work flow for selecting my random sample of the training and test sets. I wasn't able to upload the original CSVs to github they had to be loaded onto my local system and i reference them there. Because of that, This entire chunk is commented so it doesn't run unless the user fully intends to run it. 
+
+# I chose to sample these files for two reasons. The first is that Github has limits on the size of the repository, and I wanted to make running my code relatively easy. The second is I'm operating with limited system. A small sample sped up processing times on my system. If one wanted to replicate this work with the full files you could skip this chunk and work directly with the full files. 
+
+#library(readr)
+#library(dplyr)
+## Training data set merge and sampling
+#train_transaction <- read_csv("~/Desktop/GitHub/ECO395-Fraud-Data/Fraud Data/ieee-fraud-detection/train_transaction.csv")
+#train_identity <- read_csv("~/Desktop/GitHub/ECO395-Fraud-Data/Fraud Data/ieee-fraud-detection/train_identity.csv")
+
+##Here I'm merging the two training data sets and then selecting a random sample that is equal to 20% of the original training set. 
+
+#fraud_train_full <- merge(train_transaction, train_identity, by ="TransactionID")
+
+#fraud_train_sample <- sample_frac(fraud_train_full, size = .2, replace = FALSE)
+
+#write.csv(fraud_train_sample, "~/Desktop/fraud_train_sample.csv", row.names = TRUE)
+
+
+#fraud_train_sample <- read_csv("~/Desktop/fraud_train_sample.csv")
+
+## fraud_train_sample.csv was saved to my github repository, which is directly referenced in the code going forward
+
+## This is the same load, merge, random sample workflow used above and discussed in the introduction
+#test_identity <- read_csv("~/Desktop/GitHub/ECO395-Fraud-Data/Fraud Data/ieee-fraud-detection/test_identity.csv")
+
+#test_transaction <- read_csv("~/Desktop/GitHub/ECO395-Fraud-Data/Fraud Data/ieee-fraud-detection/test_transaction.csv")
+
+#fraud_test_full <- merge(test_transaction, test_identity, by ="TransactionID")
+
+#fraud_test_sample <- sample_frac(fraud_test_full, size = .2, replace = FALSE)
+
+#write.csv(fraud_test_sample, "~/Desktop/fraud_test_sample.csv", row.names = TRUE)
+
+#head(fraud_test_sample)
+
+```
+
+
